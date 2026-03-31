@@ -1,3 +1,13 @@
+---
+title: Live_Score
+emoji: ⚽
+colorFrom: blue
+colorTo: green
+sdk: docker
+app_port: 7860
+pinned: false
+---
+
 # LiveScore CSV Scraper
 
 FastAPI + Playwright app that scrapes recent LiveScore team matches and exports team stats CSV files from a web UI.

@@ -333,20 +333,22 @@ async def process_urls_async(job_id: str, url_list: list):
                     extra_urls = match_urls[MAX_MATCHES:]
 
                     primary_results = await asyncio.gather(*(scrape_single_match(url) for url in primary_urls))
-
-                    detailed_rows = []
-                    summary_only_rows = []
+                    ordered_primary_rows = []
+                    missing_detailed_count = 0
 
                     for result in primary_results:
                         if not result:
                             continue
                         _, stats_row, _, has_detailed_stats = result
-                        if has_detailed_stats:
-                            detailed_rows.append(stats_row)
-                        else:
-                            summary_only_rows.append(stats_row)
+                        ordered_primary_rows.append({
+                            "row": stats_row,
+                            "has_detailed_stats": has_detailed_stats,
+                        })
+                        if not has_detailed_stats:
+                            missing_detailed_count += 1
 
-                    if len(detailed_rows) < MAX_MATCHES:
+                    replacement_rows = []
+                    if missing_detailed_count > 0:
                         for url in extra_urls:
                             extra_result = await scrape_single_match(url)
                             if not extra_result:
@@ -354,14 +356,25 @@ async def process_urls_async(job_id: str, url_list: list):
 
                             _, stats_row, _, has_detailed_stats = extra_result
                             if has_detailed_stats:
-                                detailed_rows.append(stats_row)
-                            else:
-                                summary_only_rows.append(stats_row)
+                                replacement_rows.append(stats_row)
 
-                            if len(detailed_rows) >= MAX_MATCHES:
+                            if len(replacement_rows) >= missing_detailed_count:
                                 break
 
-                    all_stats_rows = (detailed_rows + summary_only_rows)[:MAX_MATCHES]
+                    replacement_idx = 0
+                    all_stats_rows = []
+                    for item in ordered_primary_rows:
+                        if item["has_detailed_stats"]:
+                            all_stats_rows.append(item["row"])
+                            continue
+
+                        if replacement_idx < len(replacement_rows):
+                            all_stats_rows.append(replacement_rows[replacement_idx])
+                            replacement_idx += 1
+                        else:
+                            all_stats_rows.append(item["row"])
+
+                    all_stats_rows = all_stats_rows[:MAX_MATCHES]
 
                     with jobs_lock:
                         job = jobs.get(job_id)

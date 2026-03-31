@@ -4,6 +4,7 @@ import json
 import csv
 import re
 import os
+from urllib.parse import urlparse
 
 # List of team URLs to process
 TEAM_RESULTS_URLS = [
@@ -20,6 +21,8 @@ LISTING_SCROLL_WAIT_MS = int(os.environ.get("LISTING_SCROLL_WAIT_MS", "250"))
 MAIN_DATA_WAIT_MS = int(os.environ.get("MAIN_DATA_WAIT_MS", "2500"))
 SECTION_DATA_WAIT_MS = int(os.environ.get("SECTION_DATA_WAIT_MS", "3500"))
 EXTRA_STATS_RETRY_WAIT_MS = int(os.environ.get("EXTRA_STATS_RETRY_WAIT_MS", "6500"))
+MATCH_PAGE_STABILIZE_MS = int(os.environ.get("MATCH_PAGE_STABILIZE_MS", "1400"))
+TAB_CAPTURE_WAIT_MS = int(os.environ.get("TAB_CAPTURE_WAIT_MS", "2600"))
 BLOCK_NON_ESSENTIAL_ASSETS = os.environ.get("BLOCK_NON_ESSENTIAL_ASSETS", "true").lower() == "true"
 
 BLOCKED_RESOURCE_TYPES = {"image", "media", "font"}
@@ -205,6 +208,32 @@ async def wait_for_captured_keys(captured, keys, timeout_ms, interval_ms=80):
     return all(captured.get(key) is not None for key in keys)
 
 
+def build_next_data_paths(match_url, suffix=""):
+    parsed_path = urlparse(match_url).path.strip("/")
+    if not parsed_path:
+        return []
+
+    candidate_bases = [parsed_path]
+    if parsed_path.startswith("en/"):
+        candidate_bases.append(parsed_path[len("en/"):])
+    else:
+        candidate_bases.append(f"en/{parsed_path}")
+
+    normalized = []
+    seen = set()
+    suffix = suffix.strip("/")
+    for base in candidate_bases:
+        path = base.rstrip("/")
+        if suffix:
+            path = f"{path}/{suffix}"
+        path = f"{path}.json"
+        if path not in seen:
+            seen.add(path)
+            normalized.append(path)
+
+    return normalized
+
+
 def has_stats_payload(source_data):
     try:
         event = source_data["pageProps"]["initialEventData"]["event"]
@@ -287,6 +316,45 @@ async def extract_embedded_event_data(page):
         return extract_event_from_payload(data)
     except Exception:
         return None
+
+
+async def extract_next_build_id(page):
+    try:
+        script_content = await page.evaluate(
+            """() => {
+                const el = document.querySelector('script#__NEXT_DATA__');
+                return el ? el.textContent : null;
+            }"""
+        )
+        if not script_content:
+            return None
+
+        data = json.loads(script_content)
+        build_id = data.get("buildId")
+        if isinstance(build_id, str) and build_id.strip():
+            return build_id
+        return None
+    except Exception:
+        return None
+
+
+async def fetch_next_data_payload(page, build_id, match_url, suffix=""):
+    if not build_id:
+        return None
+
+    for path in build_next_data_paths(match_url, suffix=suffix):
+        try:
+            next_data_url = f"https://www.livescore.com/_next/data/{build_id}/{path}"
+            response = await page.request.get(next_data_url, timeout=NAVIGATION_TIMEOUT_MS)
+            if not response.ok:
+                continue
+            payload = await response.json()
+            if extract_event_from_payload(payload):
+                return payload
+        except Exception:
+            continue
+
+    return None
 
 
 async def abort_non_essential_assets(route):
@@ -505,6 +573,7 @@ async def scrape_match_data(page, match_url, target_team_id=None, target_team_la
 
     try:
         await page.goto(match_url, wait_until="domcontentloaded", timeout=NAVIGATION_TIMEOUT_MS)
+        await page.wait_for_timeout(MATCH_PAGE_STABILIZE_MS)
         await dismiss_popups(page)
         await wait_for_captured_keys(captured, ["main_page_data"], MAIN_DATA_WAIT_MS)
         main_embedded_event = await extract_embedded_event_data(page)
@@ -519,10 +588,23 @@ async def scrape_match_data(page, match_url, target_team_id=None, target_team_la
                     stats_tab = page.get_by_text("Statistics", exact=True)
                 if await stats_tab.count() > 0:
                     await stats_tab.first.click(timeout=2500)
+                    await page.wait_for_timeout(TAB_CAPTURE_WAIT_MS)
                     await wait_for_captured_keys(captured, ["stats_page_data"], SECTION_DATA_WAIT_MS)
                     tab_embedded_event = await extract_embedded_event_data(page)
                     if tab_embedded_event:
                         embedded_events.append(tab_embedded_event)
+            except Exception:
+                pass
+
+            try:
+                h2h_tab = page.get_by_text("H2H", exact=True)
+                if await h2h_tab.count() > 0:
+                    await h2h_tab.first.click(timeout=2500)
+                    await page.wait_for_timeout(TAB_CAPTURE_WAIT_MS)
+                    await wait_for_captured_keys(captured, ["h2h_page_data"], SECTION_DATA_WAIT_MS)
+                    h2h_embedded_event = await extract_embedded_event_data(page)
+                    if h2h_embedded_event:
+                        embedded_events.append(h2h_embedded_event)
             except Exception:
                 pass
 
@@ -532,6 +614,7 @@ async def scrape_match_data(page, match_url, target_team_id=None, target_team_la
                 try:
                     fallback_url = match_url.rstrip("/") + "/" + suffix
                     await page.goto(fallback_url, wait_until="domcontentloaded", timeout=NAVIGATION_TIMEOUT_MS)
+                    await page.wait_for_timeout(TAB_CAPTURE_WAIT_MS)
                     await wait_for_captured_keys(captured, [key], SECTION_DATA_WAIT_MS)
                     fallback_embedded_event = await extract_embedded_event_data(page)
                     if fallback_embedded_event:
@@ -551,12 +634,30 @@ async def scrape_match_data(page, match_url, target_team_id=None, target_team_la
             try:
                 retry_stats_url = match_url.rstrip("/") + "/stats/"
                 await page.goto(retry_stats_url, wait_until="networkidle", timeout=NAVIGATION_TIMEOUT_MS)
+                await page.wait_for_timeout(TAB_CAPTURE_WAIT_MS)
                 await wait_for_captured_keys(captured, ["stats_page_data"], EXTRA_STATS_RETRY_WAIT_MS)
                 retry_embedded_event = await extract_embedded_event_data(page)
                 if retry_embedded_event:
                     embedded_events.append(retry_embedded_event)
             except Exception:
                 pass
+
+        # If listeners still missed Next.js payloads, query _next/data directly.
+        if not (captured["main_page_data"] and captured["stats_page_data"]):
+            build_id = await extract_next_build_id(page)
+            if build_id:
+                if captured["main_page_data"] is None:
+                    direct_main = await fetch_next_data_payload(page, build_id, match_url, suffix="")
+                    if direct_main is not None:
+                        captured["main_page_data"] = direct_main
+                if captured["stats_page_data"] is None:
+                    direct_stats = await fetch_next_data_payload(page, build_id, match_url, suffix="stats")
+                    if direct_stats is not None:
+                        captured["stats_page_data"] = direct_stats
+                if captured["h2h_page_data"] is None:
+                    direct_h2h = await fetch_next_data_payload(page, build_id, match_url, suffix="h2h")
+                    if direct_h2h is not None:
+                        captured["h2h_page_data"] = direct_h2h
 
     except Exception as e:
         print(f"Error scraping match {match_url}: {e}")

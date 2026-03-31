@@ -41,6 +41,7 @@ HEADLESS = os.environ.get("HEADLESS", "true").lower() == "true"
 MAX_WORKERS = int(os.environ.get("MAX_WORKERS", "10"))
 JOB_TTL_SECONDS = int(os.environ.get("JOB_TTL_SECONDS", "3600"))
 BLOCK_NON_ESSENTIAL_ASSETS = os.environ.get("BLOCK_NON_ESSENTIAL_ASSETS", "true").lower() == "true"
+EXTRA_MATCH_BUFFER = int(os.environ.get("EXTRA_MATCH_BUFFER", "6"))
 
 
 def cleanup_finished_jobs():
@@ -296,10 +297,11 @@ async def process_urls_async(job_id: str, url_list: list):
                 try:
                     listing_page = await context.new_page()
                     try:
+                        candidate_limit = max(MAX_MATCHES, MAX_MATCHES + max(0, EXTRA_MATCH_BUFFER))
                         match_urls = await collect_recent_match_urls(
                             listing_page,
                             team_url,
-                            MAX_MATCHES,
+                            candidate_limit,
                         )
                     finally:
                         await listing_page.close()
@@ -312,27 +314,54 @@ async def process_urls_async(job_id: str, url_list: list):
                                 job["progress"] += 1
                         return
 
-                    all_stats_rows = []
-
-                    async def scrape_worker(match_url: str):
+                    async def scrape_single_match(match_url: str):
                         async with page_sem:
                             page = await context.new_page()
                             try:
-                                result = await scrape_match_data(
+                                return await scrape_match_data(
                                     page,
                                     match_url,
                                     target_team_id=team_id,
                                     target_team_label=team_name,
                                 )
-                                if result:
-                                    _, stats_row, _ = result
-                                    all_stats_rows.append(stats_row)
                             except Exception:
-                                pass
+                                return None
                             finally:
                                 await page.close()
 
-                    await asyncio.gather(*(scrape_worker(url) for url in match_urls))
+                    primary_urls = match_urls[:MAX_MATCHES]
+                    extra_urls = match_urls[MAX_MATCHES:]
+
+                    primary_results = await asyncio.gather(*(scrape_single_match(url) for url in primary_urls))
+
+                    detailed_rows = []
+                    summary_only_rows = []
+
+                    for result in primary_results:
+                        if not result:
+                            continue
+                        _, stats_row, _, has_detailed_stats = result
+                        if has_detailed_stats:
+                            detailed_rows.append(stats_row)
+                        else:
+                            summary_only_rows.append(stats_row)
+
+                    if len(detailed_rows) < MAX_MATCHES:
+                        for url in extra_urls:
+                            extra_result = await scrape_single_match(url)
+                            if not extra_result:
+                                continue
+
+                            _, stats_row, _, has_detailed_stats = extra_result
+                            if has_detailed_stats:
+                                detailed_rows.append(stats_row)
+                            else:
+                                summary_only_rows.append(stats_row)
+
+                            if len(detailed_rows) >= MAX_MATCHES:
+                                break
+
+                    all_stats_rows = (detailed_rows + summary_only_rows)[:MAX_MATCHES]
 
                     with jobs_lock:
                         job = jobs.get(job_id)

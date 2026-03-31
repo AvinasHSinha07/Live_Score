@@ -608,6 +608,7 @@ async def scrape_match_data(page, match_url, target_team_id=None, target_team_la
     away_form = event.get("awayScoreForm", [])
     head_to_head = event.get("headToHead", {})
     statistics = event.get("statistics", {})
+    has_detailed_stats = isinstance(statistics, dict) and bool(statistics)
     tabs = event.get("tabs", [])
 
     team_centric_stats_row = build_team_centric_stats_row(
@@ -630,7 +631,7 @@ async def scrape_match_data(page, match_url, target_team_id=None, target_team_la
         "history": history_rows,
     }
 
-    return output, team_centric_stats_row, history_rows
+    return output, team_centric_stats_row, history_rows, has_detailed_stats
 
 
 async def main():
@@ -686,8 +687,8 @@ async def main():
                 if not result:
                     continue
                 
-                # Unpack the results (ignoring output and history_rows as requested)
-                output, stats_row, history_rows = result
+                # Unpack the results (ignoring output/history/quality in CLI mode)
+                output, stats_row, history_rows, has_detailed_stats = result
                 all_stats_rows.append(stats_row)
 
             # Define specific file name for this team's stats

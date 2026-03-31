@@ -1,78 +1,54 @@
-# LiveScore CSV Scraper - Quick Start
+# LiveScore CSV Scraper
 
-## 🚀 Quick Setup (3 steps)
+FastAPI + Playwright app that scrapes recent LiveScore team matches and exports team stats CSV files from a web UI.
 
-### Step 1: Install Dependencies
+## Run Locally
+
+1. Install dependencies:
+
 ```bash
 pip install -r requirements.txt
 python -m playwright install
 ```
 
-### Step 2: Run Locally
+2. Start server:
+
 ```bash
 python -m uvicorn app:app --reload
 ```
 
-### Step 3: Open Browser
-Visit `http://localhost:8000` and start scraping!
+3. Open:
 
----
+http://localhost:8000
 
-## 📦 Deploy to Heroku (3 commands)
+## Free Deployment (Recommended)
 
-```bash
-heroku login
-heroku create your-app-name
-git push heroku main
-```
+The project now includes a Docker setup for free hosting on Hugging Face Spaces (Docker), which supports Playwright.
 
-Then open with: `heroku open`
+Files added for deployment:
 
----
+- `Dockerfile`
+- `.dockerignore`
 
-## 📝 How to Use
+Full steps are in [DEPLOYMENT.md](DEPLOYMENT.md).
 
-1. **Paste URLs** or **Upload a file** with LiveScore team URLs (one per line)
-2. Click **"Start Scraping"**
-3. Wait for progress to complete
-4. **Download CSV** files for each team
+## Main Features
 
-Example URL:
-```
-https://www.livescore.com/en/football/team/real-madrid/4009/results/
-```
+- URL paste or file upload input
+- Multi-team scraping jobs
+- Real-time progress polling
+- Per-team CSV download and ZIP download
+- Toggleable analysis panel and organized table view in frontend
 
----
+## Runtime Tuning (Environment Variables)
 
-## 📚 Full Documentation
+- `MAX_MATCHES` (default `10`)
+- `MAX_WORKERS` (default `10` in app, `6` in Docker env)
+- `HEADLESS` (default `true`)
+- `BLOCK_NON_ESSENTIAL_ASSETS` (default `true`)
+- `NAVIGATION_TIMEOUT_MS` (default `45000`)
 
-See [DEPLOYMENT.md](DEPLOYMENT.md) for:
-- Detailed local setup
-- Heroku deployment guide
-- API endpoints
-- Troubleshooting
-- CSV output format
+## Notes
 
----
-
-## 🛠️ Project Files
-
-- **app.py** - FastAPI backend with scraping engine
-- **frontend.html** - Beautiful web interface
-- **main.py** - Core scraping logic (unchanged)
-- **requirements.txt** - All Python dependencies
-- **Procfile** - Heroku deployment config
-- **runtime.txt** - Python version (3.11.7)
-
----
-
-## ⚡ What's New
-
-✅ Web interface with real-time progress  
-✅ Support for text input and file uploads  
-✅ Parallel processing of multiple URLs  
-✅ Separate CSV downloads for each team  
-✅ Ready for Heroku deployment  
-✅ Modern, responsive design  
-
-Enjoy! 🎉
+- Free tiers may sleep when idle.
+- Higher worker counts can speed up scraping but may increase memory/CPU usage.

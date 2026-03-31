@@ -19,6 +19,7 @@ LISTING_INITIAL_WAIT_MS = int(os.environ.get("LISTING_INITIAL_WAIT_MS", "1200"))
 LISTING_SCROLL_WAIT_MS = int(os.environ.get("LISTING_SCROLL_WAIT_MS", "250"))
 MAIN_DATA_WAIT_MS = int(os.environ.get("MAIN_DATA_WAIT_MS", "2500"))
 SECTION_DATA_WAIT_MS = int(os.environ.get("SECTION_DATA_WAIT_MS", "3500"))
+EXTRA_STATS_RETRY_WAIT_MS = int(os.environ.get("EXTRA_STATS_RETRY_WAIT_MS", "6500"))
 BLOCK_NON_ESSENTIAL_ASSETS = os.environ.get("BLOCK_NON_ESSENTIAL_ASSETS", "true").lower() == "true"
 
 BLOCKED_RESOURCE_TYPES = {"image", "media", "font"}
@@ -537,6 +538,25 @@ async def scrape_match_data(page, match_url, target_team_id=None, target_team_la
                         embedded_events.append(fallback_embedded_event)
                 except Exception:
                     pass
+
+        has_any_stats = (
+            has_stats_payload(captured.get("stats_page_data"))
+            or has_stats_payload(captured.get("main_page_data"))
+            or any(has_stats_event(ev) for ev in embedded_events)
+        )
+
+        # Hosted runners are occasionally slower to hydrate stats payloads.
+        # Do one final retry on /stats with a longer wait only when needed.
+        if not has_any_stats:
+            try:
+                retry_stats_url = match_url.rstrip("/") + "/stats/"
+                await page.goto(retry_stats_url, wait_until="networkidle", timeout=NAVIGATION_TIMEOUT_MS)
+                await wait_for_captured_keys(captured, ["stats_page_data"], EXTRA_STATS_RETRY_WAIT_MS)
+                retry_embedded_event = await extract_embedded_event_data(page)
+                if retry_embedded_event:
+                    embedded_events.append(retry_embedded_event)
+            except Exception:
+                pass
 
     except Exception as e:
         print(f"Error scraping match {match_url}: {e}")

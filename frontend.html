@@ -856,6 +856,7 @@
         let currentJobId = null;
         let pollInterval = null;
         let autoDownloadedJobId = null;
+        let pollFailureCount = 0;
 
         // Tab switching
         document.querySelectorAll('.tab').forEach(tab => {
@@ -940,6 +941,7 @@
 
                 const data = await response.json();
                 currentJobId = data.job_id;
+                pollFailureCount = 0;
 
                 document.getElementById('progressSection').classList.add('active');
                 document.getElementById('resultsSection').classList.remove('active');
@@ -960,25 +962,60 @@
 
             try {
                 const response = await fetch(`/api/job/${currentJobId}`);
-                if (!response.ok) return;
+                if (!response.ok) {
+                    pollFailureCount += 1;
+
+                    if (response.status === 404) {
+                        clearInterval(pollInterval);
+                        pollInterval = null;
+                        currentJobId = null;
+                        document.getElementById('progressSection').classList.remove('active');
+                        document.getElementById('scrapeBtn').disabled = false;
+                        document.getElementById('scrapeBtn').textContent = 'Start Scraping';
+                        showError('Previous job not found (server restarted or job expired). Start a new scraping run.');
+                        return;
+                    }
+
+                    if (pollFailureCount >= 5) {
+                        clearInterval(pollInterval);
+                        pollInterval = null;
+                        document.getElementById('scrapeBtn').disabled = false;
+                        document.getElementById('scrapeBtn').textContent = 'Start Scraping';
+                        showError('Unable to fetch job status repeatedly. Please try again.');
+                    }
+                    return;
+                }
+
+                pollFailureCount = 0;
 
                 const job = await response.json();
                 updateProgress(job);
 
                 if (job.status === 'completed') {
                     clearInterval(pollInterval);
+                    pollInterval = null;
                     showResults(job);
                     triggerAutoDownloadAll(job);
                     document.getElementById('scrapeBtn').disabled = false;
                     document.getElementById('scrapeBtn').textContent = 'Start Scraping';
                 } else if (job.status === 'failed') {
                     clearInterval(pollInterval);
+                    pollInterval = null;
                     showError(job.error || 'An error occurred during scraping');
                     document.getElementById('scrapeBtn').disabled = false;
                     document.getElementById('scrapeBtn').textContent = 'Start Scraping';
                     document.getElementById('progressSection').classList.remove('active');
                 }
             } catch (error) {
+                pollFailureCount += 1;
+                if (pollFailureCount >= 5) {
+                    clearInterval(pollInterval);
+                    pollInterval = null;
+                    document.getElementById('scrapeBtn').disabled = false;
+                    document.getElementById('scrapeBtn').textContent = 'Start Scraping';
+                    document.getElementById('progressSection').classList.remove('active');
+                    showError('Network error while polling job status. Please restart scraping.');
+                }
                 console.error('Poll error:', error);
             }
         }

@@ -40,8 +40,7 @@ MAX_MATCHES = int(os.environ.get("MAX_MATCHES", "10"))
 HEADLESS = os.environ.get("HEADLESS", "true").lower() == "true"
 MAX_WORKERS = int(os.environ.get("MAX_WORKERS", "10"))
 JOB_TTL_SECONDS = int(os.environ.get("JOB_TTL_SECONDS", "3600"))
-BLOCK_NON_ESSENTIAL_ASSETS = os.environ.get("BLOCK_NON_ESSENTIAL_ASSETS", "true").lower() == "true"
-EXTRA_MATCH_BUFFER = int(os.environ.get("EXTRA_MATCH_BUFFER", "6"))
+BLOCK_NON_ESSENTIAL_ASSETS = os.environ.get("BLOCK_NON_ESSENTIAL_ASSETS", "false").lower() == "true"
 
 
 def cleanup_finished_jobs():
@@ -297,11 +296,10 @@ async def process_urls_async(job_id: str, url_list: list):
                 try:
                     listing_page = await context.new_page()
                     try:
-                        candidate_limit = max(MAX_MATCHES, MAX_MATCHES + max(0, EXTRA_MATCH_BUFFER))
                         match_urls = await collect_recent_match_urls(
                             listing_page,
                             team_url,
-                            candidate_limit,
+                            MAX_MATCHES,
                         )
                     finally:
                         await listing_page.close()
@@ -329,52 +327,14 @@ async def process_urls_async(job_id: str, url_list: list):
                             finally:
                                 await page.close()
 
-                    primary_urls = match_urls[:MAX_MATCHES]
-                    extra_urls = match_urls[MAX_MATCHES:]
+                    results = await asyncio.gather(*(scrape_single_match(url) for url in match_urls))
 
-                    primary_results = await asyncio.gather(*(scrape_single_match(url) for url in primary_urls))
-                    ordered_primary_rows = []
-                    missing_detailed_count = 0
-
-                    for result in primary_results:
+                    all_stats_rows = []
+                    for result in results:
                         if not result:
                             continue
-                        _, stats_row, _, has_detailed_stats = result
-                        ordered_primary_rows.append({
-                            "row": stats_row,
-                            "has_detailed_stats": has_detailed_stats,
-                        })
-                        if not has_detailed_stats:
-                            missing_detailed_count += 1
-
-                    replacement_rows = []
-                    if missing_detailed_count > 0:
-                        for url in extra_urls:
-                            extra_result = await scrape_single_match(url)
-                            if not extra_result:
-                                continue
-
-                            _, stats_row, _, has_detailed_stats = extra_result
-                            if has_detailed_stats:
-                                replacement_rows.append(stats_row)
-
-                            if len(replacement_rows) >= missing_detailed_count:
-                                break
-
-                    replacement_idx = 0
-                    all_stats_rows = []
-                    for item in ordered_primary_rows:
-                        if item["has_detailed_stats"]:
-                            all_stats_rows.append(item["row"])
-                            continue
-
-                        if replacement_idx < len(replacement_rows):
-                            all_stats_rows.append(replacement_rows[replacement_idx])
-                            replacement_idx += 1
-                        else:
-                            all_stats_rows.append(item["row"])
-
-                    all_stats_rows = all_stats_rows[:MAX_MATCHES]
+                        _, stats_row, _, _ = result
+                        all_stats_rows.append(stats_row)
 
                     with jobs_lock:
                         job = jobs.get(job_id)

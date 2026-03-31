@@ -15,15 +15,15 @@ MAX_MATCHES = 10
 HEADLESS = True  
 MAX_WORKERS = 10
 
-NAVIGATION_TIMEOUT_MS = int(os.environ.get("NAVIGATION_TIMEOUT_MS", "45000"))
-LISTING_INITIAL_WAIT_MS = int(os.environ.get("LISTING_INITIAL_WAIT_MS", "1200"))
-LISTING_SCROLL_WAIT_MS = int(os.environ.get("LISTING_SCROLL_WAIT_MS", "250"))
-MAIN_DATA_WAIT_MS = int(os.environ.get("MAIN_DATA_WAIT_MS", "2500"))
-SECTION_DATA_WAIT_MS = int(os.environ.get("SECTION_DATA_WAIT_MS", "3500"))
+NAVIGATION_TIMEOUT_MS = int(os.environ.get("NAVIGATION_TIMEOUT_MS", "90000"))
+LISTING_INITIAL_WAIT_MS = int(os.environ.get("LISTING_INITIAL_WAIT_MS", "4000"))
+LISTING_SCROLL_WAIT_MS = int(os.environ.get("LISTING_SCROLL_WAIT_MS", "800"))
+MAIN_DATA_WAIT_MS = int(os.environ.get("MAIN_DATA_WAIT_MS", "3000"))
+SECTION_DATA_WAIT_MS = int(os.environ.get("SECTION_DATA_WAIT_MS", "3000"))
 EXTRA_STATS_RETRY_WAIT_MS = int(os.environ.get("EXTRA_STATS_RETRY_WAIT_MS", "6500"))
-MATCH_PAGE_STABILIZE_MS = int(os.environ.get("MATCH_PAGE_STABILIZE_MS", "1400"))
-TAB_CAPTURE_WAIT_MS = int(os.environ.get("TAB_CAPTURE_WAIT_MS", "2600"))
-BLOCK_NON_ESSENTIAL_ASSETS = os.environ.get("BLOCK_NON_ESSENTIAL_ASSETS", "true").lower() == "true"
+MATCH_PAGE_STABILIZE_MS = int(os.environ.get("MATCH_PAGE_STABILIZE_MS", "3000"))
+TAB_CAPTURE_WAIT_MS = int(os.environ.get("TAB_CAPTURE_WAIT_MS", "2500"))
+BLOCK_NON_ESSENTIAL_ASSETS = os.environ.get("BLOCK_NON_ESSENTIAL_ASSETS", "false").lower() == "true"
 
 BLOCKED_RESOURCE_TYPES = {"image", "media", "font"}
 
@@ -191,8 +191,8 @@ async def dismiss_popups(page):
         try:
             btn = page.get_by_text(text, exact=True)
             if await btn.count() > 0:
-                await btn.first.click(timeout=1200)
-                await page.wait_for_timeout(200)
+                await btn.first.click(timeout=2000)
+                await page.wait_for_timeout(1000)
                 # print(f"Clicked popup button: {text}") # Commented out to reduce console noise
                 break
         except Exception:
@@ -440,24 +440,11 @@ async def collect_recent_match_urls(page, team_url, max_matches=10):
     await page.wait_for_timeout(LISTING_INITIAL_WAIT_MS)
     await dismiss_popups(page)
 
-    stagnation = 0
-    previous_count = 0
-    for _ in range(8):
-        current_count = await page.locator('div[data-id$="_mtc-r"]').count()
-        if current_count >= max_matches:
-            break
-
-        if current_count <= previous_count:
-            stagnation += 1
-        else:
-            stagnation = 0
-
-        if stagnation >= 2:
-            break
-
-        previous_count = current_count
-        await page.mouse.wheel(0, 700)
+    for _ in range(10):
+        await page.mouse.wheel(0, 50)
         await page.wait_for_timeout(LISTING_SCROLL_WAIT_MS)
+        if await page.locator('div[data-id$="_mtc-r"]').count() >= max_matches:
+            break
 
     urls = []
     seen = set()
@@ -580,47 +567,46 @@ async def scrape_match_data(page, match_url, target_team_id=None, target_team_la
         if main_embedded_event:
             embedded_events.append(main_embedded_event)
 
-        # Fast path: most matches already include statistics in the initial payload.
-        if not has_stats_payload(captured.get("main_page_data")) and not has_stats_event(main_embedded_event):
+        # Always hydrate Stats/H2H tabs (matches local working behavior).
+        try:
+            stats_tab = page.get_by_text("Stats", exact=True)
+            if await stats_tab.count() == 0:
+                stats_tab = page.get_by_text("Statistics", exact=True)
+            if await stats_tab.count() > 0:
+                await stats_tab.first.click(timeout=3000)
+                await page.wait_for_timeout(TAB_CAPTURE_WAIT_MS)
+                await wait_for_captured_keys(captured, ["stats_page_data"], SECTION_DATA_WAIT_MS)
+                tab_embedded_event = await extract_embedded_event_data(page)
+                if tab_embedded_event:
+                    embedded_events.append(tab_embedded_event)
+        except Exception:
+            pass
+
+        try:
+            h2h_tab = page.get_by_text("H2H", exact=True)
+            if await h2h_tab.count() > 0:
+                await h2h_tab.first.click(timeout=3000)
+                await page.wait_for_timeout(TAB_CAPTURE_WAIT_MS)
+                await wait_for_captured_keys(captured, ["h2h_page_data"], SECTION_DATA_WAIT_MS)
+                h2h_embedded_event = await extract_embedded_event_data(page)
+                if h2h_embedded_event:
+                    embedded_events.append(h2h_embedded_event)
+        except Exception:
+            pass
+
+        for suffix, key in [("stats/", "stats_page_data"), ("h2h/", "h2h_page_data")]:
+            if captured[key] is not None:
+                continue
             try:
-                stats_tab = page.get_by_text("Stats", exact=True)
-                if await stats_tab.count() == 0:
-                    stats_tab = page.get_by_text("Statistics", exact=True)
-                if await stats_tab.count() > 0:
-                    await stats_tab.first.click(timeout=2500)
-                    await page.wait_for_timeout(TAB_CAPTURE_WAIT_MS)
-                    await wait_for_captured_keys(captured, ["stats_page_data"], SECTION_DATA_WAIT_MS)
-                    tab_embedded_event = await extract_embedded_event_data(page)
-                    if tab_embedded_event:
-                        embedded_events.append(tab_embedded_event)
+                fallback_url = match_url.rstrip("/") + "/" + suffix
+                await page.goto(fallback_url, wait_until="domcontentloaded", timeout=NAVIGATION_TIMEOUT_MS)
+                await page.wait_for_timeout(2000)
+                await wait_for_captured_keys(captured, [key], SECTION_DATA_WAIT_MS)
+                fallback_embedded_event = await extract_embedded_event_data(page)
+                if fallback_embedded_event:
+                    embedded_events.append(fallback_embedded_event)
             except Exception:
                 pass
-
-            try:
-                h2h_tab = page.get_by_text("H2H", exact=True)
-                if await h2h_tab.count() > 0:
-                    await h2h_tab.first.click(timeout=2500)
-                    await page.wait_for_timeout(TAB_CAPTURE_WAIT_MS)
-                    await wait_for_captured_keys(captured, ["h2h_page_data"], SECTION_DATA_WAIT_MS)
-                    h2h_embedded_event = await extract_embedded_event_data(page)
-                    if h2h_embedded_event:
-                        embedded_events.append(h2h_embedded_event)
-            except Exception:
-                pass
-
-            for suffix, key in [("stats/", "stats_page_data"), ("h2h/", "h2h_page_data")]:
-                if captured[key] is not None:
-                    continue
-                try:
-                    fallback_url = match_url.rstrip("/") + "/" + suffix
-                    await page.goto(fallback_url, wait_until="domcontentloaded", timeout=NAVIGATION_TIMEOUT_MS)
-                    await page.wait_for_timeout(TAB_CAPTURE_WAIT_MS)
-                    await wait_for_captured_keys(captured, [key], SECTION_DATA_WAIT_MS)
-                    fallback_embedded_event = await extract_embedded_event_data(page)
-                    if fallback_embedded_event:
-                        embedded_events.append(fallback_embedded_event)
-                except Exception:
-                    pass
 
         has_any_stats = (
             has_stats_payload(captured.get("stats_page_data"))

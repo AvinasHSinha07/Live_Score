@@ -212,6 +212,38 @@ def has_stats_payload(source_data):
         return False
 
 
+def extract_event_from_payload(payload):
+    if not isinstance(payload, dict):
+        return None
+
+    candidates = [
+        payload.get("pageProps", {}).get("initialEventData", {}).get("event"),
+        payload.get("props", {}).get("pageProps", {}).get("initialEventData", {}).get("event"),
+    ]
+
+    for candidate in candidates:
+        if isinstance(candidate, dict) and candidate:
+            return candidate
+    return None
+
+
+async def extract_embedded_event_data(page):
+    try:
+        script_content = await page.evaluate(
+            """() => {
+                const el = document.querySelector('script#__NEXT_DATA__');
+                return el ? el.textContent : null;
+            }"""
+        )
+        if not script_content:
+            return None
+
+        data = json.loads(script_content)
+        return extract_event_from_payload(data)
+    except Exception:
+        return None
+
+
 async def abort_non_essential_assets(route):
     try:
         if route.request.resource_type in BLOCKED_RESOURCE_TYPES:
@@ -452,14 +484,14 @@ async def scrape_match_data(page, match_url, target_team_id=None, target_team_la
             pass
 
     source_data = captured["stats_page_data"] or captured["h2h_page_data"] or captured["main_page_data"]
-    if not source_data:
-        print(f"[{match_id}] No usable JSON captured")
-        return None
+    event = extract_event_from_payload(source_data) if source_data else None
 
-    try:
-        event = source_data["pageProps"]["initialEventData"]["event"]
-    except Exception:
-        print(f"[{match_id}] Could not locate event data")
+    if not event:
+        # Fallback when _next/data responses are missing or blocked.
+        event = await extract_embedded_event_data(page)
+
+    if not event:
+        print(f"[{match_id}] Could not locate event data (network + embedded fallback failed)")
         return None
 
     match_info = {

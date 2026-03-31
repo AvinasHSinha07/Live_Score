@@ -17,8 +17,8 @@ MAX_WORKERS = 10
 NAVIGATION_TIMEOUT_MS = int(os.environ.get("NAVIGATION_TIMEOUT_MS", "45000"))
 LISTING_INITIAL_WAIT_MS = int(os.environ.get("LISTING_INITIAL_WAIT_MS", "1200"))
 LISTING_SCROLL_WAIT_MS = int(os.environ.get("LISTING_SCROLL_WAIT_MS", "250"))
-MAIN_DATA_WAIT_MS = int(os.environ.get("MAIN_DATA_WAIT_MS", "1800"))
-SECTION_DATA_WAIT_MS = int(os.environ.get("SECTION_DATA_WAIT_MS", "1500"))
+MAIN_DATA_WAIT_MS = int(os.environ.get("MAIN_DATA_WAIT_MS", "2500"))
+SECTION_DATA_WAIT_MS = int(os.environ.get("SECTION_DATA_WAIT_MS", "3500"))
 BLOCK_NON_ESSENTIAL_ASSETS = os.environ.get("BLOCK_NON_ESSENTIAL_ASSETS", "true").lower() == "true"
 
 BLOCKED_RESOURCE_TYPES = {"image", "media", "font"}
@@ -210,6 +210,50 @@ def has_stats_payload(source_data):
         return bool(event.get("statistics"))
     except Exception:
         return False
+
+
+def has_stats_event(event):
+    return isinstance(event, dict) and bool(event.get("statistics"))
+
+
+def merge_event_data(event_main, event_stats, event_h2h, embedded_events):
+    candidates = [event_main, event_stats, event_h2h] + list(embedded_events or [])
+    candidates = [c for c in candidates if isinstance(c, dict) and c]
+    if not candidates:
+        return None
+
+    base = event_main or candidates[0]
+    merged = dict(base)
+
+    for candidate in candidates:
+        for key, value in candidate.items():
+            if merged.get(key) in (None, "", [], {}) and value not in (None, "", [], {}):
+                merged[key] = value
+
+    stats_candidates = [
+        event_stats,
+        event_h2h,
+        *embedded_events,
+        event_main,
+    ]
+    h2h_candidates = [
+        event_h2h,
+        event_stats,
+        *embedded_events,
+        event_main,
+    ]
+
+    for candidate in stats_candidates:
+        if isinstance(candidate, dict) and isinstance(candidate.get("statistics"), dict) and candidate.get("statistics"):
+            merged["statistics"] = candidate["statistics"]
+            break
+
+    for candidate in h2h_candidates:
+        if isinstance(candidate, dict) and isinstance(candidate.get("headToHead"), dict) and candidate.get("headToHead"):
+            merged["headToHead"] = candidate["headToHead"]
+            break
+
+    return merged
 
 
 def extract_event_from_payload(payload):
@@ -435,6 +479,7 @@ async def scrape_match_data(page, match_url, target_team_id=None, target_team_la
         "stats_page_data": None,
         "h2h_page_data": None,
     }
+    embedded_events = []
 
     async def handle_response(response):
         try:
@@ -461,9 +506,25 @@ async def scrape_match_data(page, match_url, target_team_id=None, target_team_la
         await page.goto(match_url, wait_until="domcontentloaded", timeout=NAVIGATION_TIMEOUT_MS)
         await dismiss_popups(page)
         await wait_for_captured_keys(captured, ["main_page_data"], MAIN_DATA_WAIT_MS)
+        main_embedded_event = await extract_embedded_event_data(page)
+        if main_embedded_event:
+            embedded_events.append(main_embedded_event)
 
         # Fast path: most matches already include statistics in the initial payload.
-        if not has_stats_payload(captured.get("main_page_data")):
+        if not has_stats_payload(captured.get("main_page_data")) and not has_stats_event(main_embedded_event):
+            try:
+                stats_tab = page.get_by_text("Stats", exact=True)
+                if await stats_tab.count() == 0:
+                    stats_tab = page.get_by_text("Statistics", exact=True)
+                if await stats_tab.count() > 0:
+                    await stats_tab.first.click(timeout=2500)
+                    await wait_for_captured_keys(captured, ["stats_page_data"], SECTION_DATA_WAIT_MS)
+                    tab_embedded_event = await extract_embedded_event_data(page)
+                    if tab_embedded_event:
+                        embedded_events.append(tab_embedded_event)
+            except Exception:
+                pass
+
             for suffix, key in [("stats/", "stats_page_data"), ("h2h/", "h2h_page_data")]:
                 if captured[key] is not None:
                     continue
@@ -471,6 +532,9 @@ async def scrape_match_data(page, match_url, target_team_id=None, target_team_la
                     fallback_url = match_url.rstrip("/") + "/" + suffix
                     await page.goto(fallback_url, wait_until="domcontentloaded", timeout=NAVIGATION_TIMEOUT_MS)
                     await wait_for_captured_keys(captured, [key], SECTION_DATA_WAIT_MS)
+                    fallback_embedded_event = await extract_embedded_event_data(page)
+                    if fallback_embedded_event:
+                        embedded_events.append(fallback_embedded_event)
                 except Exception:
                     pass
 
@@ -483,16 +547,17 @@ async def scrape_match_data(page, match_url, target_team_id=None, target_team_la
         except Exception:
             pass
 
-    source_data = captured["stats_page_data"] or captured["h2h_page_data"] or captured["main_page_data"]
-    event = extract_event_from_payload(source_data) if source_data else None
-
-    if not event:
-        # Fallback when _next/data responses are missing or blocked.
-        event = await extract_embedded_event_data(page)
+    event_main = extract_event_from_payload(captured["main_page_data"])
+    event_stats = extract_event_from_payload(captured["stats_page_data"])
+    event_h2h = extract_event_from_payload(captured["h2h_page_data"])
+    event = merge_event_data(event_main, event_stats, event_h2h, embedded_events)
 
     if not event:
         print(f"[{match_id}] Could not locate event data (network + embedded fallback failed)")
         return None
+
+    if not event.get("statistics"):
+        print(f"[{match_id}] Detailed stats unavailable, using summary fields only")
 
     match_info = {
         "match_id": event.get("id"),

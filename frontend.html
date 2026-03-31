@@ -995,7 +995,6 @@
                     clearInterval(pollInterval);
                     pollInterval = null;
                     showResults(job);
-                    triggerAutoDownloadAll(job);
                     document.getElementById('scrapeBtn').disabled = false;
                     document.getElementById('scrapeBtn').textContent = 'Start Scraping';
                 } else if (job.status === 'failed') {

@@ -42,7 +42,7 @@ HEADLESS = os.environ.get("HEADLESS", "true").lower() == "true"
 MAX_WORKERS = int(os.environ.get("MAX_WORKERS", "10"))
 JOB_TTL_SECONDS = int(os.environ.get("JOB_TTL_SECONDS", "3600"))
 BLOCK_NON_ESSENTIAL_ASSETS = os.environ.get("BLOCK_NON_ESSENTIAL_ASSETS", "false").lower() == "true"
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "AIzaSyDSPkZ2MjZw5-Xh-AAbstLJmCgtCHuTRd8")
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 
 
 def cleanup_finished_jobs():
@@ -296,19 +296,30 @@ async def process_urls_async(job_id: str, url_list: list):
             team_sem = asyncio.Semaphore(min(max(1, len(url_list)), MAX_WORKERS))
 
             async def process_team(team_url: str):
-                team_name = get_team_name_from_url(team_url)
-                team_id = get_team_id_from_url(team_url)
+                is_match_url = "/team/" not in team_url
+                
+                if is_match_url:
+                    # It's a specific match URL for H2H analysis
+                    m = re.search(r'/([^/]+-vs-[^/]+)/', team_url)
+                    team_name = m.group(1).replace('-', ' ') if m else "H2H_Match"
+                    team_id = None
+                else:
+                    team_name = get_team_name_from_url(team_url)
+                    team_id = get_team_id_from_url(team_url)
 
                 try:
-                    listing_page = await context.new_page()
-                    try:
-                        match_urls = await collect_recent_match_urls(
-                            listing_page,
-                            team_url,
-                            MAX_MATCHES,
-                        )
-                    finally:
-                        await listing_page.close()
+                    if is_match_url:
+                        match_urls = [team_url]
+                    else:
+                        listing_page = await context.new_page()
+                        try:
+                            match_urls = await collect_recent_match_urls(
+                                listing_page,
+                                team_url,
+                                MAX_MATCHES,
+                            )
+                        finally:
+                            await listing_page.close()
 
                     if not match_urls:
                         with jobs_lock:
@@ -336,17 +347,36 @@ async def process_urls_async(job_id: str, url_list: list):
                     results = await asyncio.gather(*(scrape_single_match(url) for url in match_urls))
 
                     all_stats_rows = []
+                    h2h_history_rows = []
                     for result in results:
                         if not result:
                             continue
-                        _, stats_row, _, _ = result
+                        _, stats_row, history_rows, _ = result
                         all_stats_rows.append(stats_row)
+                        if is_match_url:
+                            # For H2H match, we use the history rows
+                            h2h_history_rows.extend(history_rows)
+
+                    if is_match_url:
+                        # Replace all_stats_rows with formatted history rows so AI can analyze it
+                        all_stats_rows = []
+                        for r in h2h_history_rows:
+                            all_stats_rows.append({
+                                "opponent_team": r.get("away_name"),
+                                "venue": "home", # dummy
+                                "team_score": r.get("goals_for"),
+                                "opponent_score": r.get("goals_against"),
+                                "result": r.get("result"),
+                                "shots_on_target_team": "?",
+                                "corners_team": "?",
+                                "target_team": r.get("home_name")
+                            })
 
                     with jobs_lock:
                         job = jobs.get(job_id)
                         if job:
                             job["results"][team_name] = all_stats_rows
-                            job["analyses"][team_name] = build_team_analysis(all_stats_rows)
+                            
                             job["progress"] += 1
 
                     # Run AI analysis asynchronously (non-blocking)

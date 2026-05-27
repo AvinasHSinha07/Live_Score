@@ -7,7 +7,16 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <style>
+        .chart-container { margin-top: 1.5rem; width: 100%; max-width: 100%; }
+        .ai-markdown { padding: 16px; font-size: 14px; line-height: 1.6; color: #111827; }
+        .ai-markdown h2 { font-size: 18px; margin-top: 24px; margin-bottom: 12px; color: #1F2937; border-bottom: 1px solid #E5E7EB; padding-bottom: 4px; }
+        .ai-markdown ul { padding-left: 20px; margin-bottom: 16px; }
+        .ai-markdown li { margin-bottom: 8px; }
+        .ai-markdown p { margin-bottom: 16px; }
+        .ai-markdown strong { font-weight: 600; color: #000; }
         /* CSS Reset & Variables */
         :root {
             --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -1229,7 +1238,7 @@
 
             // Show successes
             Object.entries(job.results).forEach(([teamName, data]) => {
-                const analysis = job.analyses && job.analyses[teamName] ? job.analyses[teamName] : null;
+                const analysis = job.ai_analyses && job.ai_analyses[teamName] ? job.ai_analyses[teamName] : null;
                 const aiAnalysis = job.ai_analyses && job.ai_analyses[teamName] ? job.ai_analyses[teamName] : null;
                 const encodedTeamName = encodeURIComponent(teamName);
                 const resultItem = document.createElement('div');
@@ -1277,7 +1286,6 @@
         function renderAnalysis(analysis, aiAnalysis, teamName) {
             let html = '';
 
-            // --- AI Analysis Section (Primary) ---
             let aiHtml = '';
             if (aiAnalysis && aiAnalysis.ai_analysis) {
                 aiHtml = renderAiAnalysisBox(aiAnalysis, teamName);
@@ -1291,7 +1299,6 @@
                         <div class="ai-error">⚠️ ${escapeHtml(aiAnalysis.error)}</div>
                     </div>`;
             } else {
-                // Still loading or not yet available
                 aiHtml = `
                     <div class="ai-analysis-box" id="ai-box-${escapeAttr(teamName)}">
                         <div class="ai-analysis-header">
@@ -1304,74 +1311,6 @@
                     </div>`;
             }
             html += renderCollapsibleSection('AI Betting Analysis ✨', aiHtml, true);
-
-            // --- Statistical Analysis Section (Secondary) ---
-            if (!analysis) {
-                return html;
-            }
-
-            if (analysis.summary) {
-                const statsHtml = `<div class="analysis-box"><div class="analysis-note">${escapeHtml(analysis.summary)}</div></div>`;
-                html += renderCollapsibleSection('Statistical Breakdown', statsHtml, false);
-                return html;
-            }
-
-            const markets = analysis.markets || {};
-            const averages = analysis.averages || {};
-            const sample = analysis.sample_size || 0;
-
-            const sortedMarkets = Object.entries(markets).sort((a, b) => b[1] - a[1]);
-            const bestBets = sortedMarkets.filter(m => m[1] >= 75);
-            const midTier = sortedMarkets.filter(m => m[1] >= 40 && m[1] < 75);
-            const rare = sortedMarkets.filter(m => m[1] < 40);
-
-            let analysisHtml = `<div class="analysis-box">`;
-            analysisHtml += `<div class="analysis-title">Statistical Breakdown &nbsp;&middot;&nbsp; Matches: ${sample}</div>`;
-
-            analysisHtml += `<div class="analysis-section-title">High Hit Rate Markets (>= 75%)</div>`;
-            if (bestBets.length > 0) {
-                analysisHtml += `<div class="market-list">`;
-                bestBets.forEach(([market, rate]) => {
-                    analysisHtml += `<div class="market-item best-bet">
-                                <span>${escapeHtml(market)}</span>
-                                <span class="rate">${rate.toFixed(1)}%</span>
-                             </div>`;
-                });
-                analysisHtml += `</div>`;
-            } else {
-                analysisHtml += `<div class="analysis-note">No extreme high-confidence trends found (>= 75%).</div>`;
-            }
-
-            analysisHtml += `<div class="analysis-section-title" style="margin-top:24px;">All Hit Rates</div>`;
-            analysisHtml += `<div class="market-list">`;
-            midTier.forEach(([market, rate]) => {
-                analysisHtml += `<div class="market-item mid-tier">
-                            <span>${escapeHtml(market)}</span>
-                            <span class="rate">${rate.toFixed(1)}%</span>
-                         </div>`;
-            });
-            rare.forEach(([market, rate]) => {
-                analysisHtml += `<div class="market-item rare">
-                            <span>${escapeHtml(market)}</span>
-                            <span class="rate">${rate.toFixed(1)}%</span>
-                         </div>`;
-            });
-            analysisHtml += `</div>`;
-
-            analysisHtml += `<div class="analysis-section-title" style="margin-top:24px;">Statistical Averages</div>`;
-            analysisHtml += `<div class="averages-grid">`;
-            Object.entries(averages).forEach(([stat, val]) => {
-                if (val !== null && val !== undefined) {
-                    analysisHtml += `<div class="average-item">
-                                <span class="avg-label">${escapeHtml(stat)}</span>
-                                <span class="avg-value">${val.toFixed(2)}</span>
-                             </div>`;
-                }
-            });
-            analysisHtml += `</div></div>`;
-
-            html += renderCollapsibleSection('Statistical Breakdown', analysisHtml, false);
-
             return html;
         }
 
@@ -1384,7 +1323,7 @@
                         ${renderRegenerateButton(teamName)}
                     </div>
                     <div class="ai-content">
-                        ${markdownToHtml(aiAnalysis.ai_analysis)}
+                        ${marked.parse(aiAnalysis.ai_analysis)}
                     </div>
                     ${modelTag}
                 </div>`;
@@ -1503,7 +1442,33 @@
                 return `<tr><td class="row-index">${index + 1}</td>${cells}</tr>`;
             }).join('');
 
+
+            const chartId = 'chart_' + Math.random().toString(36).substring(7);
+            const teamScores = rows.map(r => parseFloat(r.team_score)).reverse();
+            const oppScores = rows.map(r => parseFloat(r.opponent_score)).reverse();
+            const labels = rows.map((r, i) => `Match ${rows.length - i}`).reverse();
+            
+            setTimeout(() => {
+                const ctx = document.getElementById(chartId);
+                if (ctx) {
+                    new Chart(ctx, {
+                        type: 'line',
+                        data: {
+                            labels: labels,
+                            datasets: [
+                                { label: 'Team Goals', data: teamScores, borderColor: '#000000', backgroundColor: '#000000', tension: 0.1 },
+                                { label: 'Opponent Goals', data: oppScores, borderColor: '#9CA3AF', backgroundColor: '#9CA3AF', tension: 0.1, borderDash: [5, 5] }
+                            ]
+                        },
+                        options: { responsive: true, maintainAspectRatio: false }
+                    });
+                }
+            }, 500);
+
             const tableHtml = `
+                <div class="chart-container" style="height: 250px; margin-bottom: 20px;">
+                    <canvas id="${chartId}"></canvas>
+                </div>
                 <div class="table-meta">
                     <span>Rows: ${rows.length}</span>
                     <span>Columns: ${columns.length}</span>

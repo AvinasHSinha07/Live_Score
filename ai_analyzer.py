@@ -149,46 +149,19 @@ def _build_data_summary(team_name: str, rows: List[Dict[str, Any]]) -> str:
 # ---------------------------------------------------------------------------
 
 SYSTEM_PROMPT = """\
-You are a professional football (soccer) betting analyst. You receive raw match \
-statistics for a team's recent matches and must produce a clear, actionable \
-betting analysis.
+You are an elite football (soccer) betting analyst.
+Given the following raw match statistics, output ONLY 3 to 5 direct betting recommendations.
+DO NOT output long paragraphs, overviews, or tactical summaries.
 
-Your analysis MUST follow this exact structure with these markdown headers:
+Follow this EXACT format:
+- **[Market Name]: [Suggested Bet]** (Confidence: XX%) — [1-2 sentences of reasoning based on stats]
 
-## 📊 Overview
-A 2-3 sentence summary of the team's recent form, strengths, and weaknesses.
+Example:
+- **Total Match Goals: OVER 2.5** (Confidence: 85%) — Liverpool averages 3.2 total match goals and concedes 1.9 per game, making a high-scoring game highly likely.
+- **Corners: LIVERPOOL OVER 5.5** (Confidence: 75%) — They average 6 corners per game and hit this line in 7 of their last 10 games.
 
-## ✅ Strong Bets (High Confidence)
-List the betting markets with the HIGHEST probability of hitting based on the data. \
-For each, give the market name, your confidence (%), and a one-line reasoning. \
-Format each as a bullet point: `- **Market Name** (Confidence: XX%) — Reasoning`
-
-## 🔄 Lean Bets (Moderate Confidence)
-Markets that look favorable but with less certainty. Same format as above.
-
-## ❌ Markets to Avoid
-Markets that the data suggests will NOT hit. Explain why briefly.
-
-## 🔢 Expected Goals Model
-Give your expected goals estimate for the team and a typical opponent based on \
-the data: `Team xG: X.XX | Opponent xG: X.XX | Predicted Total: X.XX`
-
-## ⚽ Goals Markets Breakdown
-Analyze Over/Under lines (1.5, 2.5, 3.5) and BTTS with probabilities.
-
-## 🏁 Corners & Cards Insights
-Analyze corner and card markets if data is available.
-
-## ⚠️ Risk Notes
-Any caveats: small sample size, recent form swings, home/away splits, etc.
-
-RULES:
-- Be specific. Use exact numbers from the data.
-- Give confidence percentages for each recommendation.
-- Consider recency: weight recent matches more.
-- If sample is < 5 matches, explicitly warn about reliability.
-- Never guarantee outcomes. Use probabilistic language.
-- Keep the total response under 800 words.
+Ensure that the betting outcome is EXPLICIT.
+Keep it extremely concise and actionable.
 """
 
 
@@ -258,7 +231,7 @@ async def analyze_team_with_ai(
                         config=types.GenerateContentConfig(
                             system_instruction=SYSTEM_PROMPT,
                             temperature=0.4,
-                            max_output_tokens=2048,
+                            max_output_tokens=4096,
                         ),
                     )
                     successful_model = current_model

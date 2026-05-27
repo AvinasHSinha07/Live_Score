@@ -11,6 +11,7 @@ import uuid
 import zipfile
 
 from playwright.async_api import async_playwright
+from ai_analyzer import analyze_team_with_ai
 
 # Import scraping functions from main.py
 from main import (
@@ -41,6 +42,7 @@ HEADLESS = os.environ.get("HEADLESS", "true").lower() == "true"
 MAX_WORKERS = int(os.environ.get("MAX_WORKERS", "10"))
 JOB_TTL_SECONDS = int(os.environ.get("JOB_TTL_SECONDS", "3600"))
 BLOCK_NON_ESSENTIAL_ASSETS = os.environ.get("BLOCK_NON_ESSENTIAL_ASSETS", "false").lower() == "true"
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "AIzaSyDSPkZ2MjZw5-Xh-AAbstLJmCgtCHuTRd8")
 
 
 def cleanup_finished_jobs():
@@ -226,7 +228,8 @@ async def scrape_urls(urls: dict):
     
     Expected format:
     {
-        "urls": ["url1", "url2", ...]
+        "urls": ["url1", "url2", ...],
+        "model": "gemini-2.5-flash"
     }
     """
     cleanup_finished_jobs()
@@ -250,11 +253,14 @@ async def scrape_urls(urls: dict):
             "status": "processing",
             "results": {},
             "analyses": {},
+            "ai_analyses": {},
             "errors": {},
             "progress": 0,
             "total": len(url_list),
             "started_at": time.time(),
+            "model": urls.get("model", "gemini-2.5-flash"),
         }
+
 
     # Run scraping in an isolated thread that owns its own event loop
     asyncio.create_task(asyncio.to_thread(run_job_in_thread, job_id, url_list))
@@ -343,6 +349,30 @@ async def process_urls_async(job_id: str, url_list: list):
                             job["analyses"][team_name] = build_team_analysis(all_stats_rows)
                             job["progress"] += 1
 
+                    # Run AI analysis asynchronously (non-blocking)
+                    try:
+                        with jobs_lock:
+                            job = jobs.get(job_id)
+                            model = job.get("model", "gemini-2.5-flash") if job else "gemini-2.5-flash"
+
+                        ai_result = await analyze_team_with_ai(
+                            team_name, all_stats_rows, api_key=GEMINI_API_KEY, model=model
+                        )
+                        with jobs_lock:
+                            job = jobs.get(job_id)
+                            if job:
+                                job["ai_analyses"][team_name] = ai_result
+                    except Exception as ai_exc:
+                        print(f"AI analysis failed for {team_name}: {ai_exc}")
+                        with jobs_lock:
+                            job = jobs.get(job_id)
+                            if job:
+                                job["ai_analyses"][team_name] = {
+                                    "ai_analysis": None,
+                                    "error": str(ai_exc),
+                                }
+
+
                 except Exception as exc:
                     with jobs_lock:
                         job = jobs.get(job_id)
@@ -382,6 +412,7 @@ async def get_job_status(job_id: str):
             "failed_urls": len(job["errors"]),
             "results": dict(job["results"]),
             "analyses": dict(job.get("analyses", {})),
+            "ai_analyses": dict(job.get("ai_analyses", {})),
             "errors": dict(job["errors"]),
         }
 
@@ -389,6 +420,36 @@ async def get_job_status(job_id: str):
             response["error"] = job["error"]
 
     return response
+
+
+@app.post("/api/analyze/{job_id}/{team_name}")
+async def reanalyze_team(job_id: str, team_name: str, payload: dict = None):
+    """Re-run AI analysis for a specific team on demand."""
+    model = None
+    if payload:
+        model = payload.get("model")
+
+    with jobs_lock:
+        job = jobs.get(job_id)
+        if not job:
+            raise HTTPException(status_code=404, detail="Job not found")
+        if team_name not in job["results"]:
+            raise HTTPException(status_code=404, detail="Team data not found")
+        rows = list(job["results"][team_name])
+        
+        if not model:
+            model = job.get("model", "gemini-2.5-flash")
+        else:
+            job["model"] = model
+
+    ai_result = await analyze_team_with_ai(team_name, rows, api_key=GEMINI_API_KEY, model=model)
+
+    with jobs_lock:
+        job = jobs.get(job_id)
+        if job:
+            job["ai_analyses"][team_name] = ai_result
+
+    return ai_result
 
 
 @app.get("/api/download/{job_id}/{team_name}")

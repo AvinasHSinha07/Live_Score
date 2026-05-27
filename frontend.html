@@ -663,6 +663,181 @@
             font-weight: 700;
         }
 
+        /* AI Analysis Styles */
+        .ai-analysis-box {
+            position: relative;
+            padding: 1.5rem;
+            background: var(--bg-body);
+            border-radius: var(--radius-lg);
+            border: 1px solid transparent;
+            background-clip: padding-box;
+        }
+
+        .ai-analysis-box::before {
+            content: '';
+            position: absolute;
+            inset: -1px;
+            border-radius: calc(var(--radius-lg) + 1px);
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%);
+            z-index: -1;
+        }
+
+        .ai-analysis-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 1.25rem;
+            padding-bottom: 0.75rem;
+            border-bottom: 1px solid var(--border-light);
+        }
+
+        .ai-analysis-title {
+            font-size: 0.8125rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            font-weight: 800;
+            color: var(--text-secondary);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .ai-badge {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            font-size: 0.625rem;
+            font-weight: 700;
+            padding: 0.2rem 0.5rem;
+            border-radius: 9999px;
+            letter-spacing: 0.06em;
+        }
+
+        .regenerate-btn {
+            background: var(--bg-surface);
+            color: var(--text-secondary);
+            border: 1px solid var(--border-light);
+            padding: 0.375rem 0.75rem;
+            border-radius: var(--radius-md);
+            font-family: inherit;
+            font-size: 0.75rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            gap: 0.375rem;
+        }
+
+        .regenerate-btn:hover {
+            background: var(--bg-surface-hover);
+            border-color: var(--border-base);
+            color: var(--text-primary);
+        }
+
+        .regenerate-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .regenerate-btn .spin {
+            animation: spin 1s linear infinite;
+        }
+
+        .ai-content {
+            font-size: 0.875rem;
+            line-height: 1.7;
+            color: var(--text-primary);
+        }
+
+        .ai-content h2 {
+            font-size: 1rem;
+            font-weight: 700;
+            margin-top: 1.25rem;
+            margin-bottom: 0.5rem;
+            color: var(--text-primary);
+            letter-spacing: -0.01em;
+        }
+
+        .ai-content h2:first-child {
+            margin-top: 0;
+        }
+
+        .ai-content h3 {
+            font-size: 0.9375rem;
+            font-weight: 700;
+            margin-top: 1rem;
+            margin-bottom: 0.375rem;
+            color: var(--text-primary);
+        }
+
+        .ai-content p {
+            margin-bottom: 0.5rem;
+        }
+
+        .ai-content ul, .ai-content ol {
+            margin: 0.375rem 0 0.75rem 1.25rem;
+        }
+
+        .ai-content li {
+            margin-bottom: 0.375rem;
+        }
+
+        .ai-content strong {
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+
+        .ai-content code {
+            font-family: var(--font-mono);
+            font-size: 0.8125rem;
+            background: var(--bg-subtle);
+            padding: 0.125rem 0.375rem;
+            border-radius: 0.25rem;
+            border: 1px solid var(--border-light);
+        }
+
+        .ai-loading {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.75rem;
+            padding: 2rem;
+            color: var(--text-tertiary);
+            font-size: 0.875rem;
+            font-weight: 500;
+        }
+
+        .ai-loading .ai-spinner {
+            width: 18px;
+            height: 18px;
+            border: 2.5px solid var(--border-light);
+            border-top-color: #764ba2;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        .ai-error {
+            background: var(--status-error-bg);
+            color: var(--status-error-text);
+            border: 1px solid var(--status-error-border);
+            padding: 0.75rem 1rem;
+            border-radius: var(--radius-md);
+            font-size: 0.8125rem;
+            font-weight: 500;
+        }
+
+        .model-tag {
+            font-size: 0.6875rem;
+            color: var(--text-tertiary);
+            font-weight: 500;
+            margin-top: 1rem;
+            padding-top: 0.75rem;
+            border-top: 1px solid var(--border-light);
+            display: flex;
+            align-items: center;
+            gap: 0.375rem;
+        }
+
         .averages-grid {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
@@ -823,6 +998,22 @@
                 </div>
             </div>
 
+            <div class="model-select-wrapper" style="margin-top: 1.5rem; display: flex; flex-direction: column; gap: 0.5rem; text-align: left;">
+                <label for="modelSelect" style="font-size: 0.875rem; font-weight: 600; color: var(--text-primary); display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0;">
+                    <span>AI Analysis Model</span>
+                    <span class="ai-badge" style="background: linear-gradient(135deg, #667eea, #764ba2); color: white; font-size: 0.625rem; font-weight: 700; padding: 0.2rem 0.5rem; border-radius: 9999px; letter-spacing: 0.06em; text-transform: uppercase;">Free Tier</span>
+                </label>
+                <select id="modelSelect" style="width: 100%; padding: 0.75rem 1rem; border: 1px solid var(--border-light); border-radius: var(--radius-md); font-family: inherit; font-size: 0.875rem; font-weight: 500; background: #FAFAFA; color: var(--text-primary); cursor: pointer; transition: all 0.2s ease; outline: none; box-shadow: var(--shadow-xs);">
+                    <option value="gemini-2.5-flash">Gemini 2.5 Flash (Recommended - Fast, Stable, Precise)</option>
+                    <option value="gemini-3.5-flash">Gemini 3.5 Flash (Latest 3.5 Model - High Performance)</option>
+                    <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro Preview (Deep Reasoning, Advanced)</option>
+                    <option value="gemini-2.5-pro">Gemini 2.5 Pro (Ultra Quality, Rich Betting Analytics)</option>
+                    <option value="gemini-3.1-flash-lite">Gemini 3.1 Flash-Lite (Fastest, Lightweight)</option>
+                    <option value="gemini-2.0-flash">Gemini 2.0 Flash (Legacy 2.0 Standard)</option>
+                </select>
+                <p class="hint" style="margin-top: 0.125rem; font-size: 0.75rem; color: var(--text-tertiary);">All models are free of charge under Google's developer API limits as detailed in the pricing reference.</p>
+            </div>
+
             <button id="scrapeBtn" onclick="startScraping()">Start Scraping</button>
         </main>
 
@@ -921,6 +1112,8 @@
                 return;
             }
 
+            const selectedModel = document.getElementById('modelSelect').value;
+
             scrapeBtn.disabled = true;
             scrapeBtn.textContent = 'Processing...';
 
@@ -928,7 +1121,7 @@
                 const response = await fetch('/api/scrape', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ urls })
+                    body: JSON.stringify({ urls, model: selectedModel })
                 });
 
                 if (!response.ok) {
@@ -1037,6 +1230,7 @@
             // Show successes
             Object.entries(job.results).forEach(([teamName, data]) => {
                 const analysis = job.analyses && job.analyses[teamName] ? job.analyses[teamName] : null;
+                const aiAnalysis = job.ai_analyses && job.ai_analyses[teamName] ? job.ai_analyses[teamName] : null;
                 const encodedTeamName = encodeURIComponent(teamName);
                 const resultItem = document.createElement('div');
                 resultItem.className = 'result-item';
@@ -1047,7 +1241,7 @@
                             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 4px;"><polyline points="20 6 9 17 4 12"></polyline></svg>
                             ${data.length} matches collected
                         </div>
-                        ${renderAnalysis(analysis)}
+                        ${renderAnalysis(analysis, aiAnalysis, teamName)}
                         ${renderCsvDataTable(data)}
                     </div>
                     <div class="result-actions">
@@ -1080,36 +1274,61 @@
             }
         }
 
-        function renderAnalysis(analysis) {
-            let analysisHtml = '';
+        function renderAnalysis(analysis, aiAnalysis, teamName) {
+            let html = '';
 
+            // --- AI Analysis Section (Primary) ---
+            let aiHtml = '';
+            if (aiAnalysis && aiAnalysis.ai_analysis) {
+                aiHtml = renderAiAnalysisBox(aiAnalysis, teamName);
+            } else if (aiAnalysis && aiAnalysis.error) {
+                aiHtml = `
+                    <div class="ai-analysis-box">
+                        <div class="ai-analysis-header">
+                            <div class="ai-analysis-title">✨ AI-Powered Analysis <span class="ai-badge">GEMINI</span></div>
+                            ${renderRegenerateButton(teamName)}
+                        </div>
+                        <div class="ai-error">⚠️ ${escapeHtml(aiAnalysis.error)}</div>
+                    </div>`;
+            } else {
+                // Still loading or not yet available
+                aiHtml = `
+                    <div class="ai-analysis-box" id="ai-box-${escapeAttr(teamName)}">
+                        <div class="ai-analysis-header">
+                            <div class="ai-analysis-title">✨ AI-Powered Analysis <span class="ai-badge">GEMINI</span></div>
+                        </div>
+                        <div class="ai-loading">
+                            <div class="ai-spinner"></div>
+                            Analyzing with AI...
+                        </div>
+                    </div>`;
+            }
+            html += renderCollapsibleSection('AI Betting Analysis ✨', aiHtml, true);
+
+            // --- Statistical Analysis Section (Secondary) ---
             if (!analysis) {
-                analysisHtml = `<div class="analysis-box"><div class="analysis-note">No analysis available.</div></div>`;
-                return renderCollapsibleSection('Betting Analysis', analysisHtml, false);
+                return html;
             }
 
             if (analysis.summary) {
-                analysisHtml = `<div class="analysis-box"><div class="analysis-note">${escapeHtml(analysis.summary)}</div></div>`;
-                return renderCollapsibleSection('Betting Analysis', analysisHtml, false);
+                const statsHtml = `<div class="analysis-box"><div class="analysis-note">${escapeHtml(analysis.summary)}</div></div>`;
+                html += renderCollapsibleSection('Statistical Breakdown', statsHtml, false);
+                return html;
             }
 
             const markets = analysis.markets || {};
             const averages = analysis.averages || {};
             const sample = analysis.sample_size || 0;
 
-            // Sort markets
             const sortedMarkets = Object.entries(markets).sort((a, b) => b[1] - a[1]);
-            
             const bestBets = sortedMarkets.filter(m => m[1] >= 75);
             const midTier = sortedMarkets.filter(m => m[1] >= 40 && m[1] < 75);
             const rare = sortedMarkets.filter(m => m[1] < 40);
 
-            analysisHtml = `<div class="analysis-box">`;
-            analysisHtml += `<div class="analysis-title">Comprehensive Betting Analysis &nbsp;&middot;&nbsp; Matches: ${sample}</div>`;
+            let analysisHtml = `<div class="analysis-box">`;
+            analysisHtml += `<div class="analysis-title">Statistical Breakdown &nbsp;&middot;&nbsp; Matches: ${sample}</div>`;
 
-            // SECTION A: THE BEST BETS
-            analysisHtml += `<div class="analysis-section-title">The 'Best Bets' (Hit Rate >= 75%)</div>`;
-            analysisHtml += `<div class="analysis-note" style="margin-bottom:12px;">Statistically the safest bets based on recent form.</div>`;
+            analysisHtml += `<div class="analysis-section-title">High Hit Rate Markets (>= 75%)</div>`;
             if (bestBets.length > 0) {
                 analysisHtml += `<div class="market-list">`;
                 bestBets.forEach(([market, rate]) => {
@@ -1123,8 +1342,7 @@
                 analysisHtml += `<div class="analysis-note">No extreme high-confidence trends found (>= 75%).</div>`;
             }
 
-            // SECTION B: DETAILED HIT RATES
-            analysisHtml += `<div class="analysis-section-title" style="margin-top:24px;">Detailed Hit Rates</div>`;
+            analysisHtml += `<div class="analysis-section-title" style="margin-top:24px;">All Hit Rates</div>`;
             analysisHtml += `<div class="market-list">`;
             midTier.forEach(([market, rate]) => {
                 analysisHtml += `<div class="market-item mid-tier">
@@ -1140,7 +1358,6 @@
             });
             analysisHtml += `</div>`;
 
-            // SECTION C: STATISTICAL AVERAGES
             analysisHtml += `<div class="analysis-section-title" style="margin-top:24px;">Statistical Averages</div>`;
             analysisHtml += `<div class="averages-grid">`;
             Object.entries(averages).forEach(([stat, val]) => {
@@ -1153,7 +1370,124 @@
             });
             analysisHtml += `</div></div>`;
 
-            return renderCollapsibleSection('Betting Analysis', analysisHtml, false);
+            html += renderCollapsibleSection('Statistical Breakdown', analysisHtml, false);
+
+            return html;
+        }
+
+        function renderAiAnalysisBox(aiAnalysis, teamName) {
+            const modelTag = aiAnalysis.model_used ? `<div class="model-tag">🤖 Powered by ${escapeHtml(aiAnalysis.model_used)}</div>` : '';
+            return `
+                <div class="ai-analysis-box" id="ai-box-${escapeAttr(teamName)}">
+                    <div class="ai-analysis-header">
+                        <div class="ai-analysis-title">✨ AI-Powered Analysis <span class="ai-badge">GEMINI</span></div>
+                        ${renderRegenerateButton(teamName)}
+                    </div>
+                    <div class="ai-content">
+                        ${markdownToHtml(aiAnalysis.ai_analysis)}
+                    </div>
+                    ${modelTag}
+                </div>`;
+        }
+
+        function renderRegenerateButton(teamName) {
+            const encodedName = encodeURIComponent(teamName);
+            return `<button class="regenerate-btn" onclick="regenerateAnalysis('${encodedName}', this)" title="Re-run AI analysis">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+                        Regenerate
+                    </button>`;
+        }
+
+        function escapeAttr(value) {
+            return String(value).replace(/[^a-zA-Z0-9_-]/g, '_');
+        }
+
+        function markdownToHtml(md) {
+            if (!md) return '';
+            let html = escapeHtml(md);
+
+            // Headers: ## and ###
+            html = html.replace(/^### (.+)$/gm, '<h3>$1</h3>');
+            html = html.replace(/^## (.+)$/gm, '<h2>$1</h2>');
+
+            // Bold: **text**
+            html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+
+            // Inline code: `text`
+            html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+
+            // Unordered lists: - item
+            html = html.replace(/^- (.+)$/gm, '<li>$1</li>');
+            html = html.replace(/(<li>.*<\/li>\n?)+/g, (match) => `<ul>${match}</ul>`);
+
+            // Numbered lists: 1. item
+            html = html.replace(/^\d+\. (.+)$/gm, '<li>$1</li>');
+
+            // Paragraphs: double newlines
+            html = html.replace(/\n\n/g, '</p><p>');
+            html = html.replace(/\n/g, '<br>');
+
+            // Clean up list wrapper issues
+            html = html.replace(/<br><ul>/g, '<ul>');
+            html = html.replace(/<\/ul><br>/g, '</ul>');
+            html = html.replace(/<br><\/p>/g, '</p>');
+            html = html.replace(/<p><h/g, '<h');
+            html = html.replace(/<\/h2><\/p>/g, '</h2>');
+            html = html.replace(/<\/h3><\/p>/g, '</h3>');
+
+            return `<p>${html}</p>`;
+        }
+
+        async function regenerateAnalysis(encodedTeamName, btn) {
+            if (!currentJobId) return;
+            btn.disabled = true;
+            const svgIcon = btn.querySelector('svg');
+            if (svgIcon) svgIcon.classList.add('spin');
+            btn.querySelector('svg + *') || (btn.lastChild.textContent = ' Analyzing...');
+
+            const selectedModel = document.getElementById('modelSelect').value;
+
+            try {
+                const response = await fetch(`/api/analyze/${currentJobId}/${encodedTeamName}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ model: selectedModel })
+                });
+
+                if (!response.ok) {
+                    const err = await response.json();
+                    showError(err.detail || 'Failed to regenerate analysis');
+                    return;
+                }
+
+                const aiResult = await response.json();
+                const decodedName = decodeURIComponent(encodedTeamName);
+                const boxId = `ai-box-${escapeAttr(decodedName)}`;
+                const oldBox = document.getElementById(boxId);
+
+                if (oldBox) {
+                    const wrapper = oldBox.closest('.collapsible-content');
+                    if (wrapper) {
+                        if (aiResult.ai_analysis) {
+                            wrapper.innerHTML = renderAiAnalysisBox(aiResult, decodedName);
+                        } else {
+                            wrapper.innerHTML = `
+                                <div class="ai-analysis-box" id="${boxId}">
+                                    <div class="ai-analysis-header">
+                                        <div class="ai-analysis-title">✨ AI-Powered Analysis <span class="ai-badge">GEMINI</span></div>
+                                        ${renderRegenerateButton(decodedName)}
+                                    </div>
+                                    <div class="ai-error">⚠️ ${escapeHtml(aiResult.error || 'Analysis failed')}</div>
+                                </div>`;
+                        }
+                    }
+                }
+            } catch (error) {
+                showError('Network error: ' + error.message);
+            } finally {
+                btn.disabled = false;
+                if (svgIcon) svgIcon.classList.remove('spin');
+            }
         }
 
         function renderCsvDataTable(rows) {
